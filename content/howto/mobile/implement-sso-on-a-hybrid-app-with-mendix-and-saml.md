@@ -78,47 +78,32 @@ To address the [first problem](#firstproblem), when the mobile app is starting t
 
 ```javascript
 MxApp.onConfigReady(function(config) {
-    var samlLogin = function() {
+    // Perform any custom operations on the dojoConfig object here
+    var samlLogin = function () {
         var samlWindow = cordova.InAppBrowser.open(window.mx.remoteUrl + "SSO/", "_blank", "location=no,toolbar=no");
-
-        var exitFn = function() {
+        var exitFn = function () {
             navigator.app.exitApp();
         };
-
         samlWindow.addEventListener("exit", exitFn);
-
-        var loop = setInterval(function() {
-            samlWindow.executeScript({
-                code: "window.location.href;"
-            }, function(href) {
-                if (href[0].indexOf(window.mx.remoteUrl) == 0 && href[0].indexOf("SSO") == -1) {
-                    samlWindow.executeScript({
-                        code: "document.cookie;"
-                    }, function(values) {
-                        var authPromise = new Promise(function(resolve, reject) {
-                            var token = new RegExp('AUTH_TOKEN=([^;]+)', 'g').exec(values[0]);
-                            if (token && token.length > 1) {
-                                mx.session.tokenStore.set(token[1]).then(resolve);
-                            } else {
-                                resolve();                            
-                            }
-                        });
-
-                        var closeWindow = function() {
-                            samlWindow.close();
-
-                            if (window.mx.afterLoginAction) {
-                                window.mx.afterLoginAction();
-                            }
-                        };
-
-                        authPromise.then(closeWindow);
-                    });
-                };
-            });
-        }, 1000);
+        var cb = function (event) {
+            if (event.url.indexOf(window.mx.remoteUrl) == 0 && event.url.indexOf("SSO") == -1) {
+                samlWindow.removeEventListener("loadstop", cb);
+                samlWindow.removeEventListener("exit", exitFn);
+                samlWindow.executeScript({
+                    code: "document.cookie;"
+                }, function (values) {
+                    var value = values[0] + ";";
+                    var token = new RegExp('AUTH_TOKEN=([^;]+);', 'g').exec(value)[1];
+                    window.localStorage.setItem("mx-authtoken", token);
+                    samlWindow.close();
+                    if (window.mx.afterLoginAction) {
+                        window.mx.afterLoginAction();
+                    }
+                });
+            };
+        }
+        samlWindow.addEventListener("loadstop", cb);
     }
-
     config.ui.customLoginFn = samlLogin;
 });
 ```
